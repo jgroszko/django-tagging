@@ -21,6 +21,9 @@ class TagField(CharField):
         kwargs['default'] = kwargs.get('default', '')
         super(TagField, self).__init__(*args, **kwargs)
 
+        self.senders = ()
+        self.not_senders = ()
+
     def contribute_to_class(self, cls, name):
         super(TagField, self).contribute_to_class(cls, name)
 
@@ -28,7 +31,8 @@ class TagField(CharField):
         setattr(cls, self.name, self)
 
         # Save tags back to the database post-save
-        signals.post_save.connect(self._save, cls, True)
+        self.cls = cls
+        signals.post_save.connect(self._save)
 
         # Update tags from Tag objects post-init
         signals.post_init.connect(self._update, cls, True)
@@ -68,12 +72,33 @@ class TagField(CharField):
             value = value.lower()
         self._set_instance_tag_cache(instance, value)
 
+    def _is_sender(self, sender, orig=None):
+        if(sender == self.cls or
+           sender in self.senders):
+            return True
+
+        for base in sender.__bases__:
+            if base == self.cls:
+                self.senders = self.senders + (sender,)
+                return True
+            else:
+                return self._is_sender(base, sender if orig is None else orig)
+        return False
+
     def _save(self, **kwargs): #signal, sender, instance):
         """
         Save tags back to the database
+
+        This gets hairy because we need to see if the sender inherited from our class.
+        Try to do some caching to relieve the pain.
         """
-        tags = self._get_instance_tag_cache(kwargs['instance'])
-        Tag.objects.update_tags(kwargs['instance'], tags)
+        if(kwargs['sender'] not in self.not_senders):
+            if(self._is_sender(kwargs['sender'])):
+                Tag.objects.update_tags(kwargs['instance'],
+                                        self._get_instance_tag_cache(kwargs['instance']))
+            else:
+                self.not_senders = self.not_senders + (kwargs['sender'],)
+        
 
     def _update(self, **kwargs): #signal, sender, instance):
         """
