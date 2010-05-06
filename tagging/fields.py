@@ -73,32 +73,37 @@ class TagField(CharField):
         self._set_instance_tag_cache(instance, value)
 
     def _is_sender(self, sender, orig=None):
+        """
+        Did the sender inherit from us?
+        Find out and do some caching, since this gets called on every model
+        with a tag field.
+        """
         if(sender == self.cls or
            sender in self.senders):
             return True
+        elif(sender in self.not_senders):
+            return False
+
+        orig = sender if orig is None else orig
 
         for base in sender.__bases__:
             if base == self.cls:
                 self.senders = self.senders + (sender,)
                 return True
             else:
-                return self._is_sender(base, sender if orig is None else orig)
+                return self._is_sender(base, orig)
+
+        self.not_senders = self.not_senders + (orig,)
         return False
 
     def _save(self, **kwargs): #signal, sender, instance):
         """
         Save tags back to the database
 
-        This gets hairy because we need to see if the sender inherited from our class.
-        Try to do some caching to relieve the pain.
         """
-        if(kwargs['sender'] not in self.not_senders):
-            if(self._is_sender(kwargs['sender'])):
-                Tag.objects.update_tags(kwargs['instance'],
-                                        self._get_instance_tag_cache(kwargs['instance']))
-            else:
-                self.not_senders = self.not_senders + (kwargs['sender'],)
-        
+        if(self._is_sender(kwargs['sender'])):
+            Tag.objects.update_tags(kwargs['instance'],
+                                    self._get_instance_tag_cache(kwargs['instance']))
 
     def _update(self, **kwargs): #signal, sender, instance):
         """
