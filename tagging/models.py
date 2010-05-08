@@ -73,7 +73,7 @@ class TagManager(models.Manager):
         object.
         """
         ctypes = [ContentType.objects.get_for_model(parent).pk
-                  for parent in obj._meta.get_parent_list()]
+                  for parent in obj._meta.get_parent_list().union([obj,])]
         return self.filter(items__content_type__pk__in=ctypes,
                            items__object_id=obj.pk).distinct()
 
