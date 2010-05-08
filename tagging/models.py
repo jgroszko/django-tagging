@@ -24,11 +24,12 @@ qn = connection.ops.quote_name
 ############
 
 class TagManager(models.Manager):
-    def update_tags(self, obj, tag_names):
+    def update_tags(self, obj, tag_names, ctype=None):
         """
         Update tags associated with an object.
         """
-        ctype = ContentType.objects.get_for_model(obj)
+        if ctype is None:
+            ctype = ContentType.objects.get_for_model(obj)
         current_tags = list(self.filter(items__content_type__pk=ctype.pk,
                                         items__object_id=obj.pk))
         updated_tag_names = parse_tag_input(tag_names)
@@ -47,7 +48,7 @@ class TagManager(models.Manager):
         for tag_name in updated_tag_names:
             if tag_name not in current_tag_names:
                 tag, created = self.get_or_create(name=tag_name)
-                TaggedItem._default_manager.create(tag=tag, object=obj)
+                TaggedItem._default_manager.create(tag=tag, object_id=obj.pk, content_type=ctype)
 
     def add_tag(self, obj, tag_name):
         """
@@ -71,9 +72,10 @@ class TagManager(models.Manager):
         Create a queryset matching all tags associated with the given
         object.
         """
-        ctype = ContentType.objects.get_for_model(obj)
-        return self.filter(items__content_type__pk=ctype.pk,
-                           items__object_id=obj.pk)
+        ctypes = [ContentType.objects.get_for_model(parent).pk
+                  for parent in obj._meta.get_parent_list()]
+        return self.filter(items__content_type__pk__in=ctypes,
+                           items__object_id=obj.pk).distinct()
 
     def _get_usage(self, model, counts=False, min_count=None, extra_joins=None, extra_criteria=None, params=None):
         """

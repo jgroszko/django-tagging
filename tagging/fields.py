@@ -4,6 +4,7 @@ A custom Model Field for tagging.
 from django.db.models import signals
 from django.db.models.fields import CharField
 from django.utils.translation import ugettext_lazy as _
+from django.contrib.contenttypes.models import ContentType
 
 from tagging import settings
 from tagging.models import Tag
@@ -36,6 +37,9 @@ class TagField(CharField):
 
         # Update tags from Tag objects post-init
         signals.post_init.connect(self._update, cls, True)
+
+        self.model_ctype = ContentType.objects.get(app_label=cls._meta.app_label,
+                                                   model=cls._meta.module_name)
 
     def __get__(self, instance, owner=None):
         """
@@ -103,7 +107,8 @@ class TagField(CharField):
         """
         if(self._is_sender(kwargs['sender'])):
             Tag.objects.update_tags(kwargs['instance'],
-                                    self._get_instance_tag_cache(kwargs['instance']))
+                                    self._get_instance_tag_cache(kwargs['instance']),
+                                    self.model_ctype)
 
     def _update(self, **kwargs): #signal, sender, instance):
         """
