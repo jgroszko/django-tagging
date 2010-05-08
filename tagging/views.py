@@ -1,9 +1,13 @@
 """
 Tagging related views.
 """
+from django.db.models import Count
+from django.shortcuts import render_to_response
 from django.http import Http404
+from django.template import RequestContext
 from django.utils.translation import ugettext as _
 from django.views.generic.list_detail import object_list
+from django.contrib.contenttypes.models import ContentType
 
 from tagging.models import Tag, TaggedItem
 from tagging.utils import get_tag, get_queryset_and_model
@@ -50,3 +54,25 @@ def tagged_object_list(request, queryset_or_model=None, tag=None,
             Tag.objects.related_for_model(tag_instance, queryset_or_model,
                                           counts=related_tag_counts)
     return object_list(request, queryset, **kwargs)
+
+def tags_for_object(request, model=None, order_by='?',
+                    template_name=None, extra_context={}):
+    """
+    A view for listing all tags on a model. Tags are sorted by how many
+    times they're used. Also grabs the first 5 objects in random order, or
+    ordered by the order_by argument. Renders to template template_name.
+    """
+    ctype = ContentType.objects.get_for_model(model)
+
+    ti = Tag.objects.filter(items__content_type=ctype).distinct().annotate(Count('items')).order_by('-items__count')
+
+    tag_info = [{'tag': tag,
+                 'count': tag.items__count,
+                 'items': model.objects.filter(id__in=TaggedItem.objects.filter(content_type=ctype, tag=tag).values('object_id')).order_by(order_by)[:5]
+                 }
+                for tag in ti]
+
+    return render_to_response(template_name, dict({
+                'tag_info': tag_info,
+                }, **extra_context),
+                              context_instance=RequestContext(request))
