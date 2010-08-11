@@ -38,12 +38,6 @@ class TagField(CharField):
         # Update tags from Tag objects post-init
         signals.post_init.connect(self._update, cls, True)
 
-        try:
-            self.model_ctype = ContentType.objects.get(app_label=cls._meta.app_label,
-                                                       model=cls._meta.module_name)
-        except ContentType.DoesNotExist:
-            pass
-
     def __get__(self, instance, owner=None):
         """
         Tag getter. Returns an instance's tags if accessed on an instance, and
@@ -109,9 +103,12 @@ class TagField(CharField):
 
         """
         if(self._is_sender(kwargs['sender'])):
+            my_ctype = ContentType.objects.get(app_label=self.cls._meta.app_label,
+                                               model=self.cls._meta.module_name)
+
             Tag.objects.update_tags(kwargs['instance'],
                                     self._get_instance_tag_cache(kwargs['instance']),
-                                    self.model_ctype)
+                                    my_ctype)
 
     def _update(self, **kwargs): #signal, sender, instance):
         """
