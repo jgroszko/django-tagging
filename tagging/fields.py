@@ -38,6 +38,9 @@ class TagField(CharField):
         # Update tags from Tag objects post-init
         signals.post_init.connect(self._update, cls, True)
 
+        # Update delete from Tag objects pre-delete
+        signals.pre_delete.connect(self.__delete__, cls)
+
     def __get__(self, instance, owner=None):
         """
         Tag getter. Returns an instance's tags if accessed on an instance, and
@@ -97,18 +100,19 @@ class TagField(CharField):
         self.not_senders = self.not_senders + (orig,)
         return False
 
+    def _get_ctype(self):
+        return ContentType.objects.get(app_label=self.cls._meta.app_label,
+                                       model=self.cls._meta.module_name)
+
     def _save(self, **kwargs): #signal, sender, instance):
         """
         Save tags back to the database
 
         """
         if(self._is_sender(kwargs['sender'])):
-            my_ctype = ContentType.objects.get(app_label=self.cls._meta.app_label,
-                                               model=self.cls._meta.module_name)
-
             Tag.objects.update_tags(kwargs['instance'],
                                     self._get_instance_tag_cache(kwargs['instance']),
-                                    my_ctype)
+                                    self._get_ctype())
 
     def _update(self, **kwargs): #signal, sender, instance):
         """
@@ -117,11 +121,13 @@ class TagField(CharField):
         instance = kwargs['instance']
         self._update_instance_tag_cache(instance)
 
-    def __delete__(self, instance):
+    def __delete__(self, **kwargs):
         """
         Clear all of an object's tags.
         """
-        self._set_instance_tag_cache(instance, '')
+        Tag.objects.update_tags(kwargs['instance'],
+                                '',
+                                self._get_ctype())
 
     def _get_instance_tag_cache(self, instance):
         """
